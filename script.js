@@ -5,46 +5,84 @@ const channelInput = document.getElementById("channel");
 const setChannelBtn = document.getElementById("setChannel");
 
 let currentChannel = "";
+let chatLog = [];
 
-setChannelBtn.addEventListener("click", async () => {
-    const channel = channelInput.value.trim() || "general";
-    const response = await fetch("/set_channel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel })
+// Predefined AI users with personalities
+const aiUsers = [
+    {name: "GhostHunter92", personality: "excited, conspiracy theorist"},
+    {name: "FactCheckBot", personality: "sarcastic, pedantic"},
+    {name: "WeirdAlex", personality: "dramatic, easily impressed"},
+    {name: "TechieTom", personality: "tech geek, logical"},
+    {name: "ChattyCathy", personality: "friendly, chatterbox"}
+];
+
+// Simple JS AI reply generator
+function generateAIResponse(lastMessage) {
+    const user = aiUsers[Math.floor(Math.random() * aiUsers.length)];
+    const templates = [
+        "I totally agree with that!",
+        "That's interesting...",
+        "Can you explain more?",
+        "Haha, that's funny!",
+        "Wow, I never thought of it that way.",
+        "Hmm… let me think about that."
+    ];
+    const text = templates[Math.floor(Math.random() * templates.length)];
+    return {time: new Date().toLocaleTimeString().slice(0,5), user: user.name, text};
+}
+
+// ---- Typing simulation ----
+async function typeMessage(fullText) {
+    return new Promise((resolve) => {
+        const div = document.createElement("div");
+        chatDiv.appendChild(div);
+        let i = 0;
+
+        function typeChar() {
+            if (i < fullText.length) {
+                div.textContent += fullText[i];
+                i++;
+                const delay = Math.random() * 50 + 20; // 20-70ms per char
+                setTimeout(typeChar, delay);
+            } else {
+                resolve();
+            }
+        }
+
+        typeChar();
     });
-    const data = await response.json();
-    currentChannel = data.channel;
-    // Show chat UI
-    chatDiv.style.display = "block";
-    messageInput.style.display = "inline-block";
-    sendBtn.style.display = "inline-block";
-    channelInput.style.display = "none";
-    setChannelBtn.style.display = "none";
-    loadHistory();
-});
+}
 
+// ---- Display chat log ----
+async function renderChat() {
+    chatDiv.innerHTML = "";
+    for (const msg of chatLog) {
+        if (msg.user === "You") {
+            const div = document.createElement("div");
+            div.textContent = `[${msg.time}] <${msg.user}> ${msg.text}`;
+            chatDiv.appendChild(div);
+        } else {
+            await typeMessage(`[${msg.time}] <${msg.user}> ${msg.text}`);
+        }
+    }
+    chatDiv.scrollTop = chatDiv.scrollHeight;
+}
+
+// ---- Handle user sending message ----
 async function sendMessage() {
     const msg = messageInput.value.trim();
     if (!msg) return;
-    const response = await fetch("/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg })
-    });
-    const data = await response.json();
-    updateChat(data);
+    const userMsg = {time: new Date().toLocaleTimeString().slice(0,5), user: "You", text: msg};
+    chatLog.push(userMsg);
     messageInput.value = "";
-}
+    await renderChat();
 
-function updateChat(messages) {
-    chatDiv.innerHTML = "";
-    messages.forEach(m => {
-        const div = document.createElement("div");
-        div.textContent = `[${m.time}] <${m.user}> ${m.text}`;
-        chatDiv.appendChild(div);
-    });
-    chatDiv.scrollTop = chatDiv.scrollHeight;
+    // AI response after a short delay
+    setTimeout(async () => {
+        const aiMsg = generateAIResponse(msg);
+        chatLog.push(aiMsg);
+        await renderChat();
+    }, Math.random()*1500 + 500); // random 0.5–2 sec delay
 }
 
 sendBtn.addEventListener("click", sendMessage);
@@ -52,9 +90,18 @@ messageInput.addEventListener("keypress", (e) => {
     if (e.key === "Enter") sendMessage();
 });
 
-// Load chat history on page load
-async function loadHistory() {
-    const response = await fetch("/history");
-    const data = await response.json();
-    updateChat(data);
-}
+// ---- Channel setup ----
+setChannelBtn.addEventListener("click", () => {
+    const channel = channelInput.value.trim() || "general";
+    currentChannel = channel;
+    const topicMsg = {time: new Date().toLocaleTimeString().slice(0,5), user: "System", text: `Channel ${currentChannel} created. Topic: Welcome to ${currentChannel}!`};
+    chatLog.push(topicMsg);
+
+    chatDiv.style.display = "block";
+    messageInput.style.display = "inline-block";
+    sendBtn.style.display = "inline-block";
+    channelInput.style.display = "none";
+    setChannelBtn.style.display = "none";
+
+    renderChat();
+});
