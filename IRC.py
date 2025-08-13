@@ -1,15 +1,22 @@
+import os
 import time
 import random
+import threading
 from datetime import datetime
 from gpt4all import GPT4All
 from rich.console import Console
 
 console = Console()
 
-# Initialize model (small CPU LLM)
-model = GPT4All("gpt4all-j")  # ensure model file is present or auto-download
+# --- Auto-download or load small CPU LLM ---
+MODEL_NAME = "gpt4all-j"
+model_path = f"{MODEL_NAME}.bin"  # adjust if needed
 
-# Define AI users with personalities
+console.print("Loading model, please wait...")
+model = GPT4All(MODEL_NAME)  # GPT4All will auto-download if missing
+console.print("Model loaded!\n")
+
+# --- AI users with personalities ---
 ai_users = [
     {"name": "GhostHunter92", "personality": "conspiracy theorist"},
     {"name": "FactCheckBot", "personality": "sarcastic, pedantic"},
@@ -20,11 +27,14 @@ ai_users = [
 
 chat_log = []
 
-# Helper: current timestamp
+# --- Helper functions ---
 def timestamp():
     return datetime.now().strftime("%H:%M")
 
-# Generate AI message based on context
+def display_message(user, text):
+    chat_log.append({"user": user, "text": text})
+    console.print(f"[{timestamp()}] <{user}> {text}")
+
 def generate_ai_message(user):
     context = "\n".join([f"{m['user']}: {m['text']}" for m in chat_log[-10:]])
     prompt = f"""
@@ -36,31 +46,25 @@ Generate a short, chatty IRC message in character about the topic.
     response = model.generate(prompt, max_tokens=50)
     return response.strip()
 
-# Display message instantly
-def display_message(user, text):
-    chat_log.append({"user": user, "text": text})
-    console.print(f"[{timestamp()}] <{user}> {text}")
+# --- AI chatter loop ---
+def ai_loop(user):
+    while True:
+        delay = random.uniform(5, 15)  # 5–15 sec
+        time.sleep(delay)
+        msg = generate_ai_message(user)
+        display_message(user["name"], msg)
 
-# AI chatter loop
 def start_ai_conversation():
     for user in ai_users:
-        def ai_loop(u=user):
-            while True:
-                delay = random.uniform(5, 15)  # 5–15 sec
-                time.sleep(delay)
-                msg = generate_ai_message(u)
-                display_message(u["name"], msg)
-        import threading
-        threading.Thread(target=ai_loop, daemon=True).start()
+        threading.Thread(target=ai_loop, args=(user,), daemon=True).start()
 
-# Main
+# --- Main ---
 def main():
     channel = console.input("Enter channel name: ").strip() or "general"
     display_message("System", f"Channel {channel} created. Topic: Welcome to {channel}!")
     
     start_ai_conversation()
 
-    # Player input loop
     while True:
         user_msg = console.input("[You] ").strip()
         if user_msg.lower() in ("quit", "exit"):
