@@ -1,71 +1,39 @@
-from flask import Flask, request, jsonify
-from gpt4all import GPT4All
-import asyncio
-import random
-from datetime import datetime
+const chatDiv = document.getElementById("chat");
+const messageInput = document.getElementById("message");
+const sendBtn = document.getElementById("send");
 
-app = Flask(__name__)
+async function sendMessage() {
+    const msg = messageInput.value.trim();
+    if (!msg) return;
+    const response = await fetch("/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg })
+    });
+    const data = await response.json();
+    updateChat(data);
+    messageInput.value = "";
+}
 
-# ---- LOAD LLaMA MODEL (auto-download) ----
-model = GPT4All("Meta-Llama-3-8B-Instruct.Q4_0.gguf")
+function updateChat(messages) {
+    chatDiv.innerHTML = "";
+    messages.forEach(m => {
+        const div = document.createElement("div");
+        div.textContent = `[${m.time}] <${m.user}> ${m.text}`;
+        chatDiv.appendChild(div);
+    });
+    chatDiv.scrollTop = chatDiv.scrollHeight;
+}
 
-# ---- AI USERS ----
-users = [
-    {"name": "GhostHunter92", "personality": "excited, conspiracy theorist"},
-    {"name": "FactCheckBot", "personality": "sarcastic, pedantic"},
-    {"name": "WeirdAlex", "personality": "dramatic, easily impressed"},
-    {"name": "TechieTom", "personality": "tech geek, logical"},
-    {"name": "ChattyCathy", "personality": "friendly, chatterbox"},
-]
+sendBtn.addEventListener("click", sendMessage);
+messageInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") sendMessage();
+});
 
-chat_log = []
-
-# ---- HELPER FUNCTION ----
-def generate_ai_messages(player_message=None):
-    recent = "\n".join([f"[{m['time']}] <{m['user']}> {m['text']}" for m in chat_log[-10:]])
-    prompt = f"""
-Users: {', '.join([u['name'] for u in users])}
-Recent messages:
-{recent}
-Player: {player_message or ''}
-
-Task: Generate 1-2 new messages from AI users in the format:
-[HH:MM] <username> message
-"""
-    try:
-        with model.chat_session() as session:
-            text = session.generate(prompt, max_tokens=150)
-        new_msgs = []
-        for line in text.split("\n"):
-            if line.startswith("[") and "] <" in line:
-                time_part = line.split("] <")[0][1:]
-                rest = line.split("] <")[1]
-                user = rest.split(">")[0]
-                msg = ">".join(rest.split(">")[1:]).strip()
-                new_msgs.append({"time": time_part, "user": user, "text": msg})
-        if not new_msgs:
-            user = random.choice(users)["name"]
-            new_msgs.append({"time": datetime.now().strftime("%H:%M"), "user": user, "text": "Hello everyone!"})
-        return new_msgs
-    except Exception as e:
-        return [{"time": datetime.now().strftime("%H:%M"), "user": "System", "text": str(e)}]
-
-# ---- ROUTES ----
-@app.route("/send", methods=["POST"])
-def send():
-    data = request.json
-    player_message = data.get("message", "")
-    chat_log.append({"time": datetime.now().strftime("%H:%M"), "user": "You", "text": player_message})
-
-    # Generate AI messages
-    ai_msgs = generate_ai_messages(player_message)
-    chat_log.extend(ai_msgs)
-
-    return jsonify(chat_log[-20:])  # return last 20 messages
-
-@app.route("/history", methods=["GET"])
-def history():
-    return jsonify(chat_log[-20:])
-
-if __name__ == "__main__":
-    app.run(debug=True)
+// Load chat history on page load
+async function loadHistory() {
+    const response = await fetch("/history");
+    const data = await response.json();
+    updateChat(data);
+}
+loadHistory();
